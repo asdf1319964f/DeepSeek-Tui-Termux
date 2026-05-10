@@ -1,86 +1,127 @@
-# Running DeepSeek-TUI on Termux (Android)
+DeepSeek TUI — Termux 一键安装
 
-DeepSeek-TUI ships official prebuilt binaries for **glibc Linux**, macOS, and Windows. Termux uses **Bionic libc** on Android, so those release artifacts will not load — you must build from source. This document covers the Termux-specific setup and the platform differences you need to know about.
+在你的 Android 手机上，5–10 分钟把 Termux 变成 DeepSeek 命令行对话环境。
 
-This port is the `termux-port` branch of [Hmbown/DeepSeek-TUI](https://github.com/Hmbown/DeepSeek-TUI). All adaptations are gated behind `cfg(target_os = "android")` so the patch is a no-op for Linux/macOS/Windows builds.
+装完之后你会得到
 
-## TL;DR
+· ✅ Termux 基础环境（curl / git / python）
+· ✅ Zsh + Oh-My-Zsh + agnoster 主题（终端更好用）
+· ✅ DeepSeek TUI 预编译二进制（不用等编译，1 分钟装好）
+· ✅ 可选：API Key 快速配置
+
+---
+
+快速开始（三步）
+
+1. 下载安装包
+
+把以下文件放到同一个目录：
+
+· deepseek-tui-termux-bin-*.tar.gz（从 Release 下载）
+· install.sh（一键安装脚本）
+
+2. 运行安装脚本
 
 ```bash
-pkg install rust binutils pkg-config openssl libsqlite git gh
-git clone -b termux-port https://github.com/Hmbown/DeepSeek-TUI.git ~/deepseek-tui
-cd ~/deepseek-tui
-bash install-termux.sh
-deepseek auth set --provider deepseek
+bash install.sh
+```
+
+脚本会：
+
+· 自动检测 Termux 环境
+· 安装依赖和 Zsh 配置
+· 解压并安装 deepseek / deepseek-tui 命令
+· 询问是否配置 API Key
+
+3. 启动
+
+```bash
 deepseek
 ```
 
-> **Important:** the repo MUST live on Termux's native filesystem (`$HOME` or anywhere under `/data/data/com.termux/files/`). Building from `/storage/emulated/0/...` (Android shared storage) fails because the FUSE mount is `noexec` — Cargo cannot run the build scripts it just compiled.
+首次使用如果没有 API Key，会提示你配置。
 
-## System packages
+---
 
-Required to build:
+配置 API Key（重要）
 
-| Package | Why |
-|---|---|
-| `rust` | rustc ≥ 1.88 (Cargo workspace requires it) |
-| `binutils` | Linker (`ld.lld`) for the final binary |
-| `pkg-config`, `openssl`, `libsqlite` | Some transitive crates probe these |
-| `git` | The dispatcher uses `git` for workspace snapshots and cloning skills |
+方式一：安装时粘贴
 
-Optional but useful at runtime:
+脚本第 5 步会直接询问，粘贴即可。
 
-| Package | Why |
-|---|---|
-| `gh` | The `github_*` tools shell out to `gh` |
-| `nodejs`, `python` | If you'll run any JS/Python tasks via the agent |
-| `termux-api` (plus the Termux:API APK) | Enables `termux-clipboard-*` and `termux-open` integration |
-
-Optional language servers (install only those for languages you use):
+方式二：手动配置
 
 ```bash
-pkg install rust-analyzer gopls clang        # Rust, Go, C/C++
-pip install pyright                          # Python
-npm install -g typescript-language-server    # TypeScript/JavaScript
+deepseek auth set --provider deepseek
 ```
 
-## What's different on Termux
+按提示输入从 platform.deepseek.com 获取的 API Key。
 
-| Feature | Behavior |
-|---|---|
-| **Secrets storage** | Always uses `~/.deepseek/secrets/secrets.json` (mode 0600). Android Keystore is not reachable from a CLI without JNI; D-Bus / Secret Service does not exist on Termux. |
-| **Self-update (`deepseek update`)** | Disabled. Official prebuilts are glibc Linux and won't run on Bionic. Re-run `cargo install --path crates/cli && cargo install --path crates/tui` to upgrade. |
-| **Sandbox** | None. macOS Seatbelt and Linux Landlock are not available; commands run with the same permissions as the Termux process. Use `Plan` mode for read-only sessions. |
-| **Browser open (OAuth, etc.)** | Tries `termux-open` first (Termux:API), then `xdg-open`. Install `pkg install termux-api` plus the Termux:API app from F-Droid for this to work. |
-| **Clipboard** | Tries arboard's stub (always fails) → `termux-clipboard-set` / `-get` (requires Termux:API) → OSC 52 escape sequence (works in any modern terminal). |
-| **GitHub `gh` discovery** | Probes `$PREFIX/bin/gh` (Termux), `/opt/homebrew/bin/gh` (macOS), `/usr/local/bin/gh`, then the bare PATH. Set `DEEPSEEK_GH_BIN=/path/to/gh` to override. |
-| **Generated `~/.deepseek/tools/example.sh`** | Uses `#!/data/data/com.termux/files/usr/bin/env sh` so it is directly executable in Termux. |
-
-## Verifying the install
+方式三：直接写配置文件
 
 ```bash
-deepseek --version              # → deepseek 0.8.17
-deepseek doctor                 # should report keyring backend = file-based (~/.deepseek/secrets/)
-deepseek auth status            # safe to run before setting a key
+mkdir -p ~/.deepseek
+cat > ~/.deepseek/config.toml << EOF
+api_key = "你的API密钥"
+default_text_model = "deepseek-v3"
+provider = "deepseek"
+EOF
 ```
 
-## Known limitations
+---
 
-- **No image clipboard paste.** Termux:API does not pass image bytes through `termux-clipboard-get`, so the @-mention image flow is text-only.
-- **No `landlock` / Seatbelt sandbox.** Treat the agent like any other Termux process. The shell tools still respect the workspace-trust prompt and `command_safety` blocklist.
-- **`portable-pty` upgraded to 0.9.** The pinned 0.8.x release pulled in `serial 0.4` → `termios 0.2.2`, which has no Android cfg arm and breaks the build. 0.9 switches to `serial2` which compiles for Android cleanly. The PTY surface is otherwise identical.
-- **OS keyring-related warnings in `deepseek doctor`.** Expected — Android lacks both Secret Service and a CLI-reachable Keystore. The file backend at `~/.deepseek/secrets/secrets.json` is the supported path.
-- **Performance.** A full release build is roughly 15–40 minutes on modern phones. Incremental rebuilds after a single source edit are typically under a minute.
+常用命令
 
-## Reporting Termux-specific issues
+命令 作用
+deepseek 启动 TUI 界面
+deepseek --version 查看版本
+deepseek auth status 检查 API Key 是否生效
+deepseek auth set --provider deepseek 重新配置 API Key
 
-When filing issues against this port, please include:
+---
+
+注意
+
+· 仅在 Termux 中运行，不适用于普通 Linux / macOS
+· 安装时会申请存储权限（termux-setup-storage），点「允许」即可
+· 脚本会自动安装 Oh-My-Zsh，当前 shell 不会立即切换，重新打开 Termux 或执行 exec zsh -l 即可生效
+
+---
+
+如何卸载
 
 ```bash
-uname -a                                     # kernel + arch
-echo "$PREFIX"                               # confirms Termux
-rustc --version
-deepseek --version
+rm -f $PREFIX/bin/deepseek $PREFIX/bin/deepseek-tui
+rm -rf ~/.deepseek ~/.oh-my-zsh
 ```
 
-…and the relevant section from `deepseek doctor`.
+（Zsh 和主题可保留，不影响）
+
+---
+
+常见问题
+
+提示“不是 Termux 环境”
+
+请确保在 Termux 应用中运行脚本。
+
+没找到 tar.gz 包
+
+把 deepseek-tui-termux-bin-*.tar.gz 放到和 install.sh 相同的文件夹。
+
+切换 Zsh 后找不到 deepseek
+
+重启 Termux 或执行：
+
+```bash
+source ~/.zshrc
+```
+
+Zsh 会自动加载 $PREFIX/bin 路径。
+
+---
+
+更多帮助
+
+· 项目主页：[GitHub 仓库链接]
+· 详细用法：USAGE-zh.md
