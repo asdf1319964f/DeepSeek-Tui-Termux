@@ -119,3 +119,4 @@ source ~/.zshrc
 
 Zsh 会自动加载 $PREFIX/bin 路径。
 
+首发在 llinux.do https://linux.do
