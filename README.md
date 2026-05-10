@@ -119,9 +119,3 @@ source ~/.zshrc
 
 Zsh 会自动加载 $PREFIX/bin 路径。
 
----
-
-更多帮助
-
-· 项目主页：[GitHub 仓库链接]
-· 详细用法：USAGE-zh.md
